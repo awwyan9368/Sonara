@@ -8,6 +8,7 @@ import { ClusterNebulae } from '../scene/ClusterNebulae';
 import { Constellations } from '../scene/Constellations';
 import { ArtistStars } from '../scene/ArtistStars';
 import { TrackPlanets } from '../scene/TrackPlanets';
+import { CosmicLandmarks } from '../scene/CosmicLandmarks';
 import { CameraController } from '../camera/CameraController';
 import { UniverseFallback } from './UniverseFallback';
 
@@ -91,17 +92,17 @@ export function UniverseCanvas({
     <div className="relative w-full h-full bg-[#05060A] overflow-hidden select-none">
       <Canvas
         camera={{ position: [0, 35, 110], fov: 50, near: 0.1, far: 800 }}
-        gl={{ antialias: preferences.visualQuality !== 'low', alpha: false, powerPreference: 'high-performance' }}
+        gl={{ antialias: preferences.visualQuality !== 'performance', alpha: false, powerPreference: 'high-performance' }}
       >
         <color attach="background" args={['#05060A']} />
-        <ambientLight intensity={0.4} />
-        <pointLight position={[50, 100, 50]} intensity={1.2} />
-        <pointLight position={[-50, -50, -50]} intensity={0.5} color="#8C6CFF" />
+        <ambientLight intensity={0.25} />
+        <directionalLight position={[50, 100, 50]} intensity={2.0} color="#FFF8F0" />
+        <pointLight position={[-50, -50, -50]} intensity={0.8} color="#8C6CFF" />
 
         <Suspense fallback={null}>
           <Starfield
             quality={preferences.visualQuality}
-            count={Math.floor(2500 * preferences.particleDensity)}
+            count={Math.floor(3500 * preferences.particleDensity)}
             reducedMotion={preferences.reducedMotion}
           />
 
@@ -109,8 +110,11 @@ export function UniverseCanvas({
             clusters={clusters}
             selectedClusterId={selectedClusterId}
             onSelectCluster={onSelectCluster}
+            quality={preferences.visualQuality}
             reducedMotion={preferences.reducedMotion}
           />
+
+          <CosmicLandmarks reducedMotion={preferences.reducedMotion} />
 
           <Constellations
             relationships={relationships}

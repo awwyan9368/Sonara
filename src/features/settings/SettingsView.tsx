@@ -89,12 +89,13 @@ export function SettingsView({
               </label>
               <select
                 value={preferences.visualQuality}
-                onChange={(e) => update({ visualQuality: e.target.value as 'low' | 'medium' | 'high' })}
+                onChange={(e) => update({ visualQuality: e.target.value as 'performance' | 'balanced' | 'high' | 'ultra' })}
                 className="w-full bg-surface-raised border border-border-subtle text-text-primary text-xs rounded-lg p-2.5 focus:outline-none focus:border-accent-cyan"
               >
-                <option value="high">High (Full Bloom, 2500+ Stars, AA)</option>
-                <option value="medium">Medium (Balanced performance)</option>
-                <option value="low">Low (Power-saving mode, integrated GPU)</option>
+                <option value="ultra">Ultra (Cinematic Spiral Galaxies, 5000+ Stars, Full Atmospheric Haloes)</option>
+                <option value="high">High (Recommended for dedicated GPUs like RTX 2050)</option>
+                <option value="balanced">Balanced (Optimized density & shaders for energy efficiency)</option>
+                <option value="performance">Performance (Maximum framerate for weak or low-power hardware)</option>
               </select>
             </div>
 

@@ -136,14 +136,14 @@ export interface TasteSnapshot {
 }
 
 export interface UserPreferences {
-  visualQuality: 'low' | 'medium' | 'high';
+  visualQuality: 'performance' | 'balanced' | 'high' | 'ultra';
   particleDensity: number; // 0.2 to 2.0
   bloomIntensity: number; // 0 to 1
   backgroundMotion: boolean;
   cameraSensitivity: number; // 0.5 to 2.0
   labelDensity: 'minimal' | 'balanced' | 'all';
   audioSensitivity: number; // 0.5 to 3.0
-  defaultPreset: 'cosmic_pulse' | 'nebula_flow' | 'stellar_geometry';
+  defaultPreset: 'cosmic_pulse' | 'nebula_flow' | 'stellar_geometry' | 'black_hole_resonance' | 'aurora_dreamscape';
   reducedMotion: boolean;
   explorationMode: '3d' | 'accessible_list';
   activeProvider: EntitySource;

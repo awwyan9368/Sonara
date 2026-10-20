@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Artist } from '@/types';
+import { createStarCoronaMaterial } from '../shaders/starCoronaShader';
 
 interface ArtistStarsProps {
   artists: Artist[];
@@ -20,8 +21,17 @@ export function ArtistStars({
 }: ArtistStarsProps) {
   const [hoveredArtistId, setHoveredArtistId] = useState<string | null>(null);
 
+  // Stellar spectral classifications based on prominence & genre
+  const getStarColor = (artist: Artist): string => {
+    if (artist.prominence > 90) return '#9bb0ff'; // Brilliant Class O Blue Giant
+    if (artist.prominence > 80) return '#cad7ff'; // Class A White Supergiant
+    if (artist.prominence > 70) return '#fff4e8'; // Class G Solar Main Sequence
+    if (artist.prominence > 60) return '#ffd2a1'; // Class K Orange Giant
+    return '#ffcc6f'; // Class M Red Star
+  };
+
   return (
-    <group name="artist-stars">
+    <group name="artist-stellar-objects">
       {artists.map((artist) => {
         if (!artist.position) return null;
 
@@ -29,14 +39,10 @@ export function ArtistStars({
         const isHovered = hoveredArtistId === artist.id;
 
         // Size proportional to prominence (0.7 to 2.4 units)
-        const baseRadius = 0.6 + (artist.prominence / 100) * 1.5;
-        const currentScale = isSelected ? 1.6 : isHovered ? 1.3 : 1.0;
+        const baseRadius = 0.65 + (artist.prominence / 100) * 1.5;
+        const currentScale = isSelected ? 1.5 : isHovered ? 1.25 : 1.0;
 
-        // Distinct colors for sources & highlights
-        let starColor = '#F3F4F8';
-        if (isSelected) starColor = '#64DFFF';
-        else if (isHovered) starColor = '#8C6CFF';
-        else if (artist.prominence > 80) starColor = '#FFE8D6';
+        const starColor = isSelected ? '#64DFFF' : isHovered ? '#8C6CFF' : getStarColor(artist);
 
         const shouldShowLabel =
           isSelected ||
@@ -50,7 +56,7 @@ export function ArtistStars({
             position={artist.position}
             scale={[currentScale, currentScale, currentScale]}
           >
-            {/* Clickable Star Hit Area & Visual Core */}
+            {/* 1. Star Core Photosphere (Emissive Standard Material) */}
             <mesh
               onClick={(e) => {
                 e.stopPropagation();
@@ -66,68 +72,90 @@ export function ArtistStars({
                 document.body.style.cursor = 'auto';
               }}
             >
-              <sphereGeometry args={[baseRadius, 16, 16]} />
+              <sphereGeometry args={[baseRadius, 32, 32]} />
               <meshStandardMaterial
                 color={starColor}
-                emissive={starColor}
-                emissiveIntensity={isSelected ? 1.8 : isHovered ? 1.2 : 0.6}
-                roughness={0.2}
-                metalness={0.8}
+                emissive={new THREE.Color(starColor)}
+                emissiveIntensity={isSelected ? 2.5 : isHovered ? 1.8 : 1.0}
+                roughness={0.15}
+                metalness={0.9}
               />
             </mesh>
 
-            {/* Pulsing Corona for Selected or High Prominence Stars */}
-            {(isSelected || isHovered) && (
-              <mesh>
-                <sphereGeometry args={[baseRadius * 1.8, 16, 16]} />
-                <meshBasicMaterial
-                  color={starColor}
-                  transparent
-                  opacity={isSelected ? 0.35 : 0.2}
-                  blending={THREE.AdditiveBlending}
-                  depthWrite={false}
-                />
-              </mesh>
+            {/* 2. Pulsating Solar Corona (Custom GLSL Atmospheric Shader) */}
+            <mesh>
+              <sphereGeometry args={[baseRadius * 1.7, 24, 24]} />
+              <primitive object={createStarCoronaMaterial(starColor, baseRadius)} attach="material" />
+            </mesh>
+
+            {/* 3. Four-point Diffraction Flare Spikes for High Prominence or Selected Stars */}
+            {(isSelected || artist.prominence > 82) && (
+              <group>
+                {/* Horizontal Spike */}
+                <mesh rotation={[0, 0, 0]}>
+                  <planeGeometry args={[baseRadius * 6.5, baseRadius * 0.15]} />
+                  <meshBasicMaterial
+                    color={starColor}
+                    transparent
+                    opacity={isSelected ? 0.8 : 0.4}
+                    blending={THREE.AdditiveBlending}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                  />
+                </mesh>
+                {/* Vertical Spike */}
+                <mesh rotation={[0, 0, Math.PI / 2]}>
+                  <planeGeometry args={[baseRadius * 6.5, baseRadius * 0.15]} />
+                  <meshBasicMaterial
+                    color={starColor}
+                    transparent
+                    opacity={isSelected ? 0.8 : 0.4}
+                    blending={THREE.AdditiveBlending}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                  />
+                </mesh>
+              </group>
             )}
 
-            {/* Orbit Ring Marker when selected */}
+            {/* 4. Orbital System Resonance Marker when Selected */}
             {isSelected && (
-              <mesh rotation={[Math.PI / 3, 0, 0]}>
-                <ringGeometry args={[baseRadius * 2.2, baseRadius * 2.3, 32]} />
+              <mesh rotation={[Math.PI / 2.8, 0, 0]}>
+                <ringGeometry args={[baseRadius * 2.4, baseRadius * 2.5, 48]} />
                 <meshBasicMaterial
                   color="#64DFFF"
                   transparent
-                  opacity={0.8}
+                  opacity={0.85}
                   side={THREE.DoubleSide}
                 />
               </mesh>
             )}
 
-            {/* Accessible Star Label */}
+            {/* 5. Accessible Contextual Star Label */}
             {shouldShowLabel && (
               <Html
-                position={[0, baseRadius + 1.2, 0]}
+                position={[0, baseRadius + 1.4, 0]}
                 center
                 distanceFactor={45}
-                zIndexRange={[80, 0]}
+                zIndexRange={[85, 0]}
               >
                 <div
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelectArtist(artist);
                   }}
-                  className={`pointer-events-auto cursor-pointer transition-all duration-200 select-none px-2 py-0.5 rounded text-center whitespace-nowrap ${
+                  className={`pointer-events-auto cursor-pointer transition-all duration-200 select-none px-2.5 py-1 rounded text-center whitespace-nowrap ${
                     isSelected
-                      ? 'bg-accent-cyan/20 border border-accent-cyan text-text-primary shadow-[0_0_12px_rgba(100,223,255,0.4)] backdrop-blur-md text-xs font-semibold'
+                      ? 'bg-accent-cyan/25 border border-accent-cyan text-text-primary shadow-[0_0_15px_rgba(100,223,255,0.5)] backdrop-blur-md text-xs font-bold scale-105'
                       : isHovered
-                      ? 'bg-surface-raised/90 border border-accent-violet text-text-primary text-xs backdrop-blur-sm'
-                      : 'bg-surface/75 border border-border-subtle text-text-secondary text-[11px] backdrop-blur-xs'
+                      ? 'bg-surface-raised/95 border border-accent-violet text-text-primary text-xs backdrop-blur-sm'
+                      : 'bg-surface/80 border border-border-subtle text-text-secondary text-[11px] backdrop-blur-xs'
                   }`}
                 >
                   <p className="font-sans leading-tight">{artist.name}</p>
                   {artist.genres?.[0] && (
-                    <span className="text-[9px] text-text-muted block font-mono">
-                      {artist.genres[0]}
+                    <span className="text-[9px] text-text-muted block font-mono mt-0.5">
+                      {artist.genres[0]} • {artist.prominence}%
                     </span>
                   )}
                 </div>
@@ -139,4 +167,3 @@ export function ArtistStars({
     </group>
   );
 }
-
