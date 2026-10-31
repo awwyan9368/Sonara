@@ -2,9 +2,10 @@
 
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Billboard } from '@react-three/drei';
+import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import { TasteCluster } from '@/types';
+import { SafeHtml } from '../components/SafeHtml';
 import { getStarParticleTexture, getNebulaDustTexture, getCrossSpikeTexture } from '../shaders/particleTextures';
 
 export type GalaxyMorphology = 'grand_design_spiral' | 'barred_spiral' | 'elliptical' | 'irregular_starburst';
@@ -344,7 +345,7 @@ export function SpiralGalaxy({
       </group>
 
       {/* Floating Interactive Galactic Label */}
-      <Html
+      <SafeHtml
         position={[0, cluster.radius * 0.85, 0]}
         center
         distanceFactor={110}
@@ -374,7 +375,7 @@ export function SpiralGalaxy({
             {cluster.memberArtistIds?.length || 0} Stars
           </span>
         </button>
-      </Html>
+      </SafeHtml>
     </group>
   );
 }

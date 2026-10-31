@@ -2,9 +2,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Billboard } from '@react-three/drei';
+import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import { Artist } from '@/types';
+import { SafeHtml } from '../components/SafeHtml';
 import { createStarCoronaMaterial } from '../shaders/starCoronaShader';
 import { createPhotosphereMaterial } from '../shaders/photosphereShader';
 import { getStarParticleTexture, getCrossSpikeTexture } from '../shaders/particleTextures';
@@ -211,7 +212,7 @@ export function ArtistStars({
 
             {/* 6. Contextual Star Label */}
             {shouldShowLabel && (
-              <Html
+              <SafeHtml
                 position={[0, 1.8, 0]}
                 center
                 distanceFactor={45}
@@ -237,7 +238,7 @@ export function ArtistStars({
                     </span>
                   )}
                 </div>
-              </Html>
+              </SafeHtml>
             )}
           </group>
         );

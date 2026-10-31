@@ -1,5 +1,6 @@
 'use client';
 
+import '@/lib/patchReact19Root';
 import React, { useState, useEffect, Suspense } from 'react';
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
