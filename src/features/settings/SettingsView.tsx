@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   Eye,
@@ -10,22 +10,104 @@ import {
   Check,
   RotateCcw,
   ExternalLink,
+  Music,
 } from 'lucide-react';
-import { UserPreferences } from '@/types';
-import { db, resetToDemoData, clearUserImportedData } from '@/lib/storage/db';
+import { UserPreferences, MusicUniverseData } from '@/types';
+import { db, clearUserImportedData, saveSpotifyUniverseData } from '@/lib/storage/db';
+import { SpotifyAdapter } from '@/features/music/spotify/spotifyAdapter';
+import { ProviderAuthStatus } from '@/features/music/providers/musicProvider';
 
 interface SettingsViewProps {
   preferences: UserPreferences;
   onUpdatePreferences: (newPrefs: UserPreferences) => void;
   onResetCamera: () => void;
+  onSyncUniverse?: (data: MusicUniverseData) => void;
 }
 
 export function SettingsView({
   preferences,
   onUpdatePreferences,
   onResetCamera,
+  onSyncUniverse,
 }: SettingsViewProps) {
   const [saveToast, setSaveToast] = useState(false);
+  const [spotifyStatus, setSpotifyStatus] = useState<ProviderAuthStatus | null>(null);
+  const [clientIdInput, setClientIdInput] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [adapter] = useState(() => new SpotifyAdapter());
+
+  useEffect(() => {
+    async function checkStatus() {
+      const st = await adapter.getStatus();
+      setSpotifyStatus(st);
+      const existingId = adapter.getClientId() || '';
+      setClientIdInput(existingId === 'your_spotify_client_id_here' ? '' : existingId);
+    }
+    checkStatus();
+  }, [adapter]);
+
+  const handleSaveClientId = () => {
+    if (!clientIdInput.trim()) {
+      alert('Please enter a valid Spotify Client ID.');
+      return;
+    }
+    adapter.setClientId(clientIdInput.trim());
+    adapter.getStatus().then(setSpotifyStatus);
+    alert('Spotify Client ID saved to local configuration!');
+  };
+
+  const handleConnectSpotify = async () => {
+    try {
+      setIsConnecting(true);
+      if (!adapter.isConfigured()) {
+        if (clientIdInput.trim()) {
+          adapter.setClientId(clientIdInput.trim());
+        } else {
+          alert('Please enter your Spotify Client ID first.');
+          setIsConnecting(false);
+          return;
+        }
+      }
+      const { redirectUrl } = await adapter.connect();
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      }
+    } catch (e) {
+      alert(String(e));
+      setIsConnecting(false);
+    }
+  };
+
+  const handleSyncSpotify = async () => {
+    setIsSyncing(true);
+    try {
+      const data = await adapter.getUniverseData(true);
+      if (data.artists.length > 0) {
+        await saveSpotifyUniverseData(data);
+        if (onSyncUniverse) {
+          onSyncUniverse(data);
+        }
+        alert(
+          `Successfully synchronized ${data.artists.length} Spotify artists and ${data.tracks.length} planetary tracks across ${data.clusters.length} galaxies!`
+        );
+      } else {
+        alert('Spotify returned 0 top artists/tracks. Please ensure you have active listening activity on this Spotify account.');
+      }
+    } catch (e) {
+      alert('Spotify synchronization failed: ' + String(e));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDisconnectSpotify = async () => {
+    if (confirm('Disconnect Spotify and revert to Demo Universe?')) {
+      await adapter.disconnect();
+      setSpotifyStatus(await adapter.getStatus());
+      window.location.reload();
+    }
+  };
 
   const update = async (patch: Partial<UserPreferences>) => {
     const next = { ...preferences, ...patch };
@@ -35,18 +117,10 @@ export function SettingsView({
     setTimeout(() => setSaveToast(false), 2000);
   };
 
-  const handleResetDemoUniverse = async () => {
-    if (confirm('Reset demo universe dataset to original factory defaults?')) {
-      await resetToDemoData();
-      alert('Demo universe successfully reset.');
-      window.location.reload();
-    }
-  };
-
   const handleClearLocalData = async () => {
-    if (confirm('Clear personal user imported items? (Demo universe will stay intact).')) {
+    if (confirm('Clear locally cached Spotify universe data? You can resync fresh data from Spotify at any time.')) {
       await clearUserImportedData();
-      alert('User data cleared.');
+      alert('Local universe data cleared.');
       window.location.reload();
     }
   };
@@ -213,37 +287,123 @@ export function SettingsView({
         <section className="p-5 rounded-2xl bg-surface border border-border-subtle space-y-4">
           <h2 className="text-base font-bold flex items-center gap-2">
             <Database className="w-5 h-5 text-accent-cyan" />
-            Data Source & Provider Integration
+            Data Source & Spotify Integration
           </h2>
 
-          <div className="p-3 rounded-xl bg-surface-raised border border-border-subtle space-y-2">
+          {/* Spotify PKCE Integration Card */}
+          <div className="p-4 rounded-xl bg-surface-raised border border-border-subtle space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-text-primary">Active Provider</span>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-surface border border-border-subtle text-accent-amber">
-                Demo Universe (Offline Functional)
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#1DB954]/20 border border-[#1DB954]/40 flex items-center justify-center">
+                  <Music className="w-4 h-4 text-[#1DB954]" />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-text-primary block">
+                    Spotify Integration (PKCE OAuth 2.0)
+                  </span>
+                  <span className="text-[11px] text-text-muted">
+                    {spotifyStatus?.connected
+                      ? `Connected as ${spotifyStatus.userName || 'Spotify User'}`
+                      : 'Sync your real top artists into the 3D universe'}
+                  </span>
+                </div>
+              </div>
+
+              <span
+                className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
+                  spotifyStatus?.connected
+                    ? 'bg-[#1DB954]/15 border-[#1DB954]/40 text-[#1DB954]'
+                    : 'bg-surface border-border-subtle text-text-muted'
+                }`}
+              >
+                {spotifyStatus?.connected ? 'Connected' : 'Not Connected'}
               </span>
             </div>
-            <p className="text-xs text-text-muted">
-              SONARA runs fully locally without external credentials. To configure optional Spotify
-              PKCE OAuth, see setup instructions in <code className="text-accent-cyan font-mono">docs/SPOTIFY-SETUP.md</code>.
-            </p>
+
+            {spotifyStatus?.connected ? (
+              <div className="flex items-center gap-3 pt-2 border-t border-border-subtle/50">
+                <button
+                  type="button"
+                  onClick={handleSyncSpotify}
+                  disabled={isSyncing}
+                  className="px-3 py-1.5 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-semibold text-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>{isSyncing ? 'Syncing with Spotify...' : 'Sync Library Now'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDisconnectSpotify}
+                  className="px-3 py-1.5 rounded-lg bg-surface hover:bg-surface-raised border border-border-subtle text-xs text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2 border-t border-border-subtle/50">
+                <div>
+                  <label className="text-[11px] font-mono text-text-muted block mb-1">
+                    Spotify Client ID
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Paste your Spotify Client ID here"
+                      value={clientIdInput}
+                      onChange={(e) => setClientIdInput(e.target.value)}
+                      className="flex-1 bg-surface border border-border-subtle text-text-primary text-xs font-mono rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveClientId}
+                      className="px-3 py-2 rounded-lg bg-surface hover:bg-surface-raised border border-border-subtle text-xs font-mono text-text-primary transition-colors cursor-pointer"
+                    >
+                      Save ID
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleConnectSpotify}
+                    disabled={isConnecting}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{isConnecting ? 'Redirecting to Spotify...' : 'Connect Spotify'}</span>
+                  </button>
+
+                  <a
+                    href="https://developer.spotify.com/dashboard"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-accent-cyan hover:underline flex items-center gap-1 font-mono"
+                  >
+                    Get Free Client ID on Spotify Dashboard &rarr;
+                  </a>
+                </div>
+
+                <div className="text-[11px] text-text-muted bg-surface/60 p-2.5 rounded-lg border border-border-subtle space-y-1">
+                  <p className="font-semibold text-text-secondary">Redirect URI to add in your Spotify Dashboard App Settings:</p>
+                  <p className="text-[10px] text-accent-amber">Note: Spotify now requires IPv4 literal <code>127.0.0.1</code> instead of <code>localhost</code>.</p>
+                  <code className="text-accent-cyan font-mono select-all block bg-surface-raised p-1 rounded">
+                    http://127.0.0.1:3001/api/auth/spotify-callback
+                  </code>
+                  <code className="text-accent-cyan font-mono select-all block bg-surface-raised p-1 rounded">
+                    http://127.0.0.1:3000/api/auth/spotify-callback
+                  </code>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-3 pt-2">
             <button
               type="button"
-              onClick={handleResetDemoUniverse}
-              className="px-3 py-2 rounded-lg bg-surface-raised hover:bg-surface border border-border-subtle text-xs font-mono text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-            >
-              Reset Demo Universe Data
-            </button>
-
-            <button
-              type="button"
               onClick={handleClearLocalData}
               className="px-3 py-2 rounded-lg bg-surface-raised hover:bg-surface border border-red-500/30 text-xs font-mono text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
             >
-              Clear User Data
+              Clear Local Universe Cache
             </button>
           </div>
         </section>

@@ -1,5 +1,4 @@
 import { Artist, Album, Track, MusicUniverseData } from '@/types';
-import { DEMO_UNIVERSE_DATA } from '@/data/demo/universeData';
 
 export interface ProviderAuthStatus {
   connected: boolean;
@@ -41,24 +40,17 @@ export class DemoMusicProvider implements IMusicProvider {
   }
 
   async getUniverseData(): Promise<MusicUniverseData> {
-    return DEMO_UNIVERSE_DATA;
+    return {
+      artists: [],
+      albums: [],
+      tracks: [],
+      relationships: [],
+      clusters: [],
+    };
   }
 
   async search(query: string): Promise<{ artists: Artist[]; tracks: Track[]; albums: Album[] }> {
-    const q = query.toLowerCase().trim();
-    if (!q) {
-      return { artists: [], tracks: [], albums: [] };
-    }
-
-    const artists = DEMO_UNIVERSE_DATA.artists.filter(
-      (a) => a.name.toLowerCase().includes(q) || a.genres.some((g) => g.toLowerCase().includes(q))
-    );
-
-    const tracks = DEMO_UNIVERSE_DATA.tracks.filter((t) => t.title.toLowerCase().includes(q));
-
-    const albums = DEMO_UNIVERSE_DATA.albums.filter((alb) => alb.title.toLowerCase().includes(q));
-
-    return { artists, tracks, albums };
+    return { artists: [], tracks: [], albums: [] };
   }
 }
 

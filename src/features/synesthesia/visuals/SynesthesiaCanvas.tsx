@@ -1,19 +1,24 @@
 'use client';
 
 import React, { Suspense, forwardRef } from 'react';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { CosmicPulse } from '../presets/CosmicPulse';
-import { NebulaFlow } from '../presets/NebulaFlow';
+import { EtherealNebula } from '../presets/EtherealNebula';
+import { SpiralResonance } from '../presets/SpiralResonance';
+import { CosmicLightflow } from '../presets/CosmicLightflow';
+import { Singularity } from '../presets/Singularity';
 import { StellarGeometry } from '../presets/StellarGeometry';
-import { BlackHoleResonance } from '../presets/BlackHoleResonance';
-import { AuroraDreamscape } from '../presets/AuroraDreamscape';
 import { Starfield } from '@/features/universe/scene/Starfield';
 
 export type SynesthesiaPresetType =
+  | 'ethereal_nebula'
+  | 'spiral_resonance'
+  | 'cosmic_lightflow'
+  | 'singularity'
+  | 'stellar_geometry'
   | 'cosmic_pulse'
   | 'nebula_flow'
-  | 'stellar_geometry'
   | 'black_hole_resonance'
   | 'aurora_dreamscape';
 
@@ -35,13 +40,16 @@ export const SynesthesiaCanvas = forwardRef<HTMLCanvasElement, SynesthesiaCanvas
       <div className="relative w-full h-full bg-[#05060A] overflow-hidden select-none">
         <Canvas
           ref={ref}
-          camera={{ position: [0, 8, 44], fov: 52, near: 0.1, far: 500 }}
+          camera={{ position: [0, 6, 42], fov: 50, near: 0.1, far: 500 }}
           gl={{
             preserveDrawingBuffer: true, // Needed for Canvas MediaRecorder capture
             antialias: quality !== 'performance',
             powerPreference: 'high-performance',
           }}
           onCreated={({ gl }) => {
+            gl.toneMapping = THREE.ACESFilmicToneMapping;
+            gl.toneMappingExposure = 1.08;
+            gl.outputColorSpace = THREE.SRGBColorSpace;
             if (onCanvasReady) {
               onCanvasReady(gl.domElement);
             }
@@ -55,16 +63,32 @@ export const SynesthesiaCanvas = forwardRef<HTMLCanvasElement, SynesthesiaCanvas
           <Suspense fallback={null}>
             <Starfield count={1200} quality={quality} reducedMotion={reducedMotion} />
 
-            {preset === 'cosmic_pulse' && (
-              <CosmicPulse
+            {(preset === 'ethereal_nebula' || preset === 'nebula_flow') && (
+              <EtherealNebula
                 sensitivity={sensitivity}
                 particleDensity={particleDensity}
                 reducedMotion={reducedMotion}
               />
             )}
 
-            {preset === 'nebula_flow' && (
-              <NebulaFlow
+            {(preset === 'spiral_resonance' || preset === 'cosmic_pulse') && (
+              <SpiralResonance
+                sensitivity={sensitivity}
+                particleDensity={particleDensity}
+                reducedMotion={reducedMotion}
+              />
+            )}
+
+            {(preset === 'cosmic_lightflow' || preset === 'aurora_dreamscape') && (
+              <CosmicLightflow
+                sensitivity={sensitivity}
+                particleDensity={particleDensity}
+                reducedMotion={reducedMotion}
+              />
+            )}
+
+            {(preset === 'singularity' || preset === 'black_hole_resonance') && (
+              <Singularity
                 sensitivity={sensitivity}
                 particleDensity={particleDensity}
                 reducedMotion={reducedMotion}
@@ -73,22 +97,6 @@ export const SynesthesiaCanvas = forwardRef<HTMLCanvasElement, SynesthesiaCanvas
 
             {preset === 'stellar_geometry' && (
               <StellarGeometry
-                sensitivity={sensitivity}
-                particleDensity={particleDensity}
-                reducedMotion={reducedMotion}
-              />
-            )}
-
-            {preset === 'black_hole_resonance' && (
-              <BlackHoleResonance
-                sensitivity={sensitivity}
-                particleDensity={particleDensity}
-                reducedMotion={reducedMotion}
-              />
-            )}
-
-            {preset === 'aurora_dreamscape' && (
-              <AuroraDreamscape
                 sensitivity={sensitivity}
                 particleDensity={particleDensity}
                 reducedMotion={reducedMotion}

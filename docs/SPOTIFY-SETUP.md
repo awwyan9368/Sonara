@@ -18,12 +18,17 @@ SONARA includes a production-grade Spotify provider adapter using **Authorizatio
 ### 1. Register a Spotify Developer App
 1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Log in and click **Create App**.
-3. Set the **App Name** (e.g. `SONARA Music Universe`).
+3. Set the **App Name** (e.g. `SONARA Music Universe`) and **App Description**.
 4. Set the **Redirect URI** to:
    ```
-   http://localhost:3000/api/auth/spotify-callback
+   http://127.0.0.1:3001/api/auth/spotify-callback
    ```
-5. Select **Web API** under APIs used.
+   *(Note: Spotify requires loopback IP `127.0.0.1`. The string `localhost` is rejected by Spotify's validator).*
+   Click **Add** to add a secondary URI if running on port 3000:
+   ```
+   http://127.0.0.1:3000/api/auth/spotify-callback
+   ```
+5. Select **Web API** under APIs used, accept Spotify's Developer Terms, and click **Save**.
 
 ### 2. Configure Environment Variables
 Create `.env.local` in the project root:

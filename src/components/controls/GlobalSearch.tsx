@@ -56,17 +56,17 @@ export function GlobalSearch({
 
   const matchedArtists = q
     ? artists.filter(
-        (a) => a.name.toLowerCase().includes(q) || a.genres.some((g) => g.toLowerCase().includes(q))
+        (a) => (a.name || '').toLowerCase().includes(q) || (a.genres || []).some((g) => g && g.toLowerCase().includes(q))
       ).slice(0, 5)
     : [];
 
   const matchedTracks = q
-    ? tracks.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 4)
+    ? tracks.filter((t) => (t.title || '').toLowerCase().includes(q)).slice(0, 4)
     : [];
 
   const matchedClusters = q
     ? clusters.filter(
-        (c) => c.label.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)
+        (c) => (c.label || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q)
       ).slice(0, 3)
     : [];
 

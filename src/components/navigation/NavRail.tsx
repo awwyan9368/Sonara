@@ -16,10 +16,10 @@ export type ActiveTab = 'explore' | 'tastedna' | 'synesthesia' | 'journey' | 'li
 interface NavRailProps {
   activeTab: ActiveTab;
   onTabChange: (tab: ActiveTab) => void;
-  isDemoMode: boolean;
+  isSpotifyConnected?: boolean;
 }
 
-export function NavRail({ activeTab, onTabChange, isDemoMode }: NavRailProps) {
+export function NavRail({ activeTab, onTabChange, isSpotifyConnected = false }: NavRailProps) {
   const navItems: Array<{ id: ActiveTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { id: 'explore', label: 'SoundGalaxy', icon: Compass },
     { id: 'tastedna', label: 'TasteDNA', icon: Dna },
@@ -81,13 +81,13 @@ export function NavRail({ activeTab, onTabChange, isDemoMode }: NavRailProps) {
       <div className="flex flex-col items-center px-1">
         <div
           className={`px-2 py-1 rounded-md text-[9px] font-mono uppercase tracking-wider text-center border ${
-            isDemoMode
-              ? 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
-              : 'bg-accent-cyan/10 border-accent-cyan/30 text-accent-cyan'
+            isSpotifyConnected
+              ? 'bg-[#1DB954]/15 border-[#1DB954]/40 text-[#1DB954]'
+              : 'bg-surface border-border-subtle text-text-muted'
           }`}
-          title={isDemoMode ? 'Operating on deterministic fictional universe data' : 'Connected to user library'}
+          title={isSpotifyConnected ? 'Connected to live Spotify account' : 'Spotify offline — connect in Settings'}
         >
-          {isDemoMode ? 'Demo Universe' : 'Live Mode'}
+          {isSpotifyConnected ? 'Spotify Live' : 'Spotify Offline'}
         </div>
       </div>
     </nav>

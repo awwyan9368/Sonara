@@ -6,8 +6,11 @@ import * as THREE from 'three';
 import { Track } from '@/types';
 import {
   PlanetArchetype,
+  resolveTrackArchetype,
   getProceduralPlanetTexture,
+  getProceduralPlanetBumpMap,
   getProceduralRingTexture,
+  getProceduralCloudTexture,
 } from '../shaders/planetTextures';
 import { createAtmosphereMaterial } from '../shaders/atmosphereShader';
 
@@ -25,23 +28,15 @@ export function DetailedPlanet({
   reducedMotion = false,
 }: DetailedPlanetProps) {
   const planetMeshRef = useRef<THREE.Mesh>(null);
+  const cloudMeshRef = useRef<THREE.Mesh>(null);
   const atmosphereRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
   const moonRef = useRef<THREE.Group>(null);
 
-  // Derive stable planet archetype deterministically from track attributes & ID
+  // Derive stable planet archetype deterministically matching the 5 visual references
   const archetype: PlanetArchetype = useMemo(() => {
-    const idHash = track.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const archetypes: PlanetArchetype[] = [
-      'terrestrial',
-      'gas_giant',
-      'ice_world',
-      'lava_world',
-      'barren_moon',
-      'gas_giant',
-    ];
-    return archetypes[idHash % archetypes.length];
-  }, [track.id]);
+    return resolveTrackArchetype(track);
+  }, [track]);
 
   const seed = useMemo(
     () => track.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 1),
@@ -53,33 +48,65 @@ export function DetailedPlanet({
     [archetype, seed]
   );
 
-  const ringTexture = useMemo(() => {
-    if (!track.hasRings) return null;
-    return getProceduralRingTexture(track.planetColor || '#E8BC83', 256);
-  }, [track.hasRings, track.planetColor]);
+  const bumpMap = useMemo(
+    () => getProceduralPlanetBumpMap(archetype, seed, 256),
+    [archetype, seed]
+  );
 
-  // Atmosphere shader material
+  const cloudTexture = useMemo(() => {
+    if (archetype === 'terrestrial') {
+      return getProceduralCloudTexture(seed, 512);
+    }
+    return null;
+  }, [archetype, seed]);
+
+  // Rings: Only polar_vortex (Ref 1) and explicit gas giants have Cassini rings
+  const shouldRenderRings = useMemo(() => {
+    return archetype === 'polar_vortex' || (archetype === 'gas_giant' && Boolean(track.hasRings));
+  }, [archetype, track.hasRings]);
+
+  const ringTexture = useMemo(() => {
+    if (!shouldRenderRings) return null;
+    return getProceduralRingTexture('#3A2E44', 256);
+  }, [shouldRenderRings]);
+
+  // Atmospheric Rayleigh halo (airless cratered bodies like Ref 5 have no atmosphere)
+  const hasAtmosphere = useMemo(() => {
+    return archetype !== 'cratered_multispectral' && archetype !== 'barren_moon';
+  }, [archetype]);
+
+  // Atmosphere shader material with Rayleigh / sunset terminator scattering
   const atmosphereMaterial = useMemo(() => {
     const atmoColors: Record<PlanetArchetype, string> = {
+      polar_vortex: '#86DFC2',
+      golden_swirl: '#F2B855',
+      aurora_oceanic: '#2FE8DC',
+      ultraviolet_storm: '#7A28E8',
+      cratered_multispectral: '#2868F0',
       terrestrial: '#64DFFF',
-      gas_giant: track.planetColor || '#E8BC83',
+      gas_giant: track.planetColor || '#86DFC2',
       ice_world: '#A8F0FF',
       lava_world: '#FF5A36',
       barren_moon: '#8A99AD',
     };
-    return createAtmosphereMaterial(atmoColors[archetype], 1.25);
+    return createAtmosphereMaterial(atmoColors[archetype] || '#64DFFF', 1.0, 1.25);
   }, [archetype, track.planetColor]);
 
-  // Planet size
-  const size = track.planetSize || 0.65;
+  // Has moon? Reference 4 (ultraviolet_storm) features an orbiting satellite moon
+  const hasMoon = useMemo(() => archetype === 'ultraviolet_storm', [archetype]);
 
-  // Has moon? 25% of planets have a natural satellite
-  const hasMoon = useMemo(() => (seed % 4 === 0), [seed]);
+  const moonTexture = useMemo(() => {
+    if (!hasMoon) return null;
+    return getProceduralPlanetTexture('cratered_multispectral', seed + 888, 128);
+  }, [hasMoon, seed]);
 
   useFrame((_, delta) => {
     if (!reducedMotion) {
       if (planetMeshRef.current) {
         planetMeshRef.current.rotation.y += delta * 0.35;
+      }
+      if (cloudMeshRef.current) {
+        cloudMeshRef.current.rotation.y += delta * 0.42;
       }
       if (moonRef.current) {
         moonRef.current.rotation.y += delta * 0.8;
@@ -88,7 +115,7 @@ export function DetailedPlanet({
   });
 
   return (
-    <group>
+    <group rotation={[0.38, 0, 0.18]}>
       {/* 1. Main Procedural Planet Surface */}
       <mesh
         ref={planetMeshRef}
@@ -104,54 +131,67 @@ export function DetailedPlanet({
           document.body.style.cursor = 'auto';
         }}
       >
-        <sphereGeometry args={[size, 32, 32]} />
+        <sphereGeometry args={[1.0, 64, 64]} />
         <meshStandardMaterial
           map={texture}
-          roughness={archetype === 'ice_world' ? 0.3 : archetype === 'gas_giant' ? 0.8 : 0.6}
-          metalness={archetype === 'ice_world' ? 0.2 : 0.05}
-          emissive={new THREE.Color(track.planetColor || '#64DFFF')}
-          emissiveIntensity={isSelected ? 0.45 : archetype === 'lava_world' ? 0.3 : 0.05}
+          bumpMap={bumpMap || undefined}
+          bumpScale={archetype === 'cratered_multispectral' ? 0.055 : 0.025}
+          roughness={archetype === 'cratered_multispectral' ? 0.85 : 0.65}
+          metalness={archetype === 'cratered_multispectral' ? 0.12 : 0.0}
+          emissive={new THREE.Color(0x000000)}
+          emissiveIntensity={0.0}
         />
       </mesh>
 
-      {/* 2. Atmospheric Scattering Halo (Fresnel Shader) */}
-      <mesh ref={atmosphereRef}>
-        <sphereGeometry args={[size * 1.15, 32, 32]} />
-        <primitive object={atmosphereMaterial} attach="material" />
-      </mesh>
+      {/* 2. Procedural Swirling Cloud Deck */}
+      {cloudTexture && (
+        <mesh ref={cloudMeshRef}>
+          <sphereGeometry args={[1.02, 64, 64]} />
+          <meshStandardMaterial
+            map={cloudTexture}
+            transparent
+            opacity={0.45}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
 
-      {/* 3. Detailed Planetary Ring with Cassini Division */}
-      {track.hasRings && ringTexture && (
-        <mesh ref={ringRef} rotation={[Math.PI / 2.6, 0.2, 0]}>
-          <ringGeometry args={[size * 1.4, size * 2.3, 64]} />
+      {/* 3. Atmospheric Scattering Halo (Rayleigh / Mie Shader) */}
+      {hasAtmosphere && (
+        <mesh ref={atmosphereRef}>
+          <sphereGeometry args={[1.035, 64, 64]} />
+          <primitive object={atmosphereMaterial} attach="material" />
+        </mesh>
+      )}
+
+      {/* 4. Concentric Cassini Planetary Ring (Reference 1) */}
+      {shouldRenderRings && ringTexture && (
+        <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[1.45, 2.45, 160]} />
           <meshBasicMaterial
             map={ringTexture}
             transparent
-            opacity={0.85}
+            opacity={0.72}
             side={THREE.DoubleSide}
             depthWrite={false}
           />
         </mesh>
       )}
 
-      {/* 4. Natural Satellite Moon */}
+      {/* 5. Natural Satellite Moon (Reference 4) */}
       {hasMoon && (
         <group ref={moonRef}>
-          <mesh position={[size * 2.5, 0.2, 0]}>
-            <sphereGeometry args={[size * 0.22, 16, 16]} />
-            <meshStandardMaterial color="#A0A6B5" roughness={0.9} />
+          <mesh position={[2.7, 0.25, 0]}>
+            <sphereGeometry args={[0.18, 32, 32]} />
+            <meshStandardMaterial
+              map={moonTexture || undefined}
+              color="#A0AAB8"
+              roughness={0.92}
+            />
           </mesh>
         </group>
       )}
 
-      {/* 5. Selection Beacon */}
-      {isSelected && (
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[size * 1.25, size * 1.3, 32]} />
-          <meshBasicMaterial color="#64DFFF" side={THREE.DoubleSide} />
-        </mesh>
-      )}
     </group>
   );
 }
-

@@ -8,8 +8,8 @@ import {
   Journey,
   TasteSnapshot,
   UserPreferences,
+  MusicUniverseData,
 } from '@/types';
-import { DEMO_UNIVERSE_DATA } from '@/data/demo/universeData';
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
   visualQuality: 'high',
@@ -22,7 +22,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   defaultPreset: 'cosmic_pulse',
   reducedMotion: false,
   explorationMode: '3d',
-  activeProvider: 'demo',
+  activeProvider: 'spotify',
 };
 
 export class SonaraDatabase extends Dexie {
@@ -55,14 +55,12 @@ export class SonaraDatabase extends Dexie {
 export const db = new SonaraDatabase();
 
 /**
- * Initialize database with demo data if empty, and default preferences
+ * Initialize database and default preferences (zero demo data loaded)
  */
 export async function initializeDatabase(): Promise<void> {
   try {
-    const artistCount = await db.artists.count();
-    if (artistCount === 0) {
-      await resetToDemoData();
-    }
+    // Purge any residual demo items from earlier runs
+    await purgeDemoData();
 
     const pref = await db.preferences.get('user_prefs');
     if (!pref) {
@@ -74,32 +72,73 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 /**
- * Seed or reset demo data without destroying user data
+ * Purge all legacy demo/mock items across all collections
  */
-export async function resetToDemoData(): Promise<void> {
-  await db.transaction('rw', [db.artists, db.albums, db.tracks, db.relationships, db.clusters], async () => {
-    // Delete only demo items
-    await db.artists.where('source').equals('demo').delete();
-    await db.albums.where('source').equals('demo').delete();
-    await db.tracks.where('source').equals('demo').delete();
+export async function purgeDemoData(): Promise<void> {
+  try {
+    await db.transaction('rw', [db.artists, db.albums, db.tracks, db.relationships, db.clusters], async () => {
+      await db.artists.where('source').equals('demo').delete();
+      await db.albums.where('source').equals('demo').delete();
+      await db.tracks.where('source').equals('demo').delete();
+      const demoClusterIds = [
+        'cluster_1', 'cluster_2', 'cluster_3', 'cluster_4', 'cluster_5',
+        'cluster_ambient', 'cluster_techno', 'cluster_jazz'
+      ];
+      await db.clusters.where('id').anyOf(demoClusterIds).delete();
 
-    // Populate demo data
-    await db.artists.bulkPut(DEMO_UNIVERSE_DATA.artists);
-    await db.albums.bulkPut(DEMO_UNIVERSE_DATA.albums);
-    await db.tracks.bulkPut(DEMO_UNIVERSE_DATA.tracks);
-    await db.relationships.bulkPut(DEMO_UNIVERSE_DATA.relationships);
-    await db.clusters.bulkPut(DEMO_UNIVERSE_DATA.clusters);
+      // Clean up legacy mock IDs not originating from Spotify integration
+      const allArtists = await db.artists.toArray();
+      const mockArtistIds = allArtists.filter((a) => !a.id.startsWith('spot_art_')).map((a) => a.id);
+      if (mockArtistIds.length > 0) {
+        await db.artists.bulkDelete(mockArtistIds);
+      }
+
+      const allTracks = await db.tracks.toArray();
+      const mockTrackIds = allTracks.filter((t) => !t.id.startsWith('spot_trk_')).map((t) => t.id);
+      if (mockTrackIds.length > 0) {
+        await db.tracks.bulkDelete(mockTrackIds);
+      }
+
+      const allAlbums = await db.albums.toArray();
+      const mockAlbumIds = allAlbums.filter((alb) => !alb.id.startsWith('spot_alb_')).map((alb) => alb.id);
+      if (mockAlbumIds.length > 0) {
+        await db.albums.bulkDelete(mockAlbumIds);
+      }
+    });
+  } catch (e) {
+    console.warn('Could not purge demo records:', e);
+  }
+}
+
+/**
+ * Atomically replaces all database records with fresh Spotify universe data
+ */
+export async function saveSpotifyUniverseData(data: MusicUniverseData): Promise<void> {
+  await db.transaction('rw', [db.artists, db.albums, db.tracks, db.relationships, db.clusters], async () => {
+    await db.artists.clear();
+    await db.albums.clear();
+    await db.tracks.clear();
+    await db.relationships.clear();
+    await db.clusters.clear();
+
+    if (data.artists.length > 0) await db.artists.bulkPut(data.artists);
+    if (data.albums.length > 0) await db.albums.bulkPut(data.albums);
+    if (data.tracks.length > 0) await db.tracks.bulkPut(data.tracks);
+    if (data.relationships.length > 0) await db.relationships.bulkPut(data.relationships);
+    if (data.clusters.length > 0) await db.clusters.bulkPut(data.clusters);
   });
 }
 
 /**
- * Clear personal imported data (leaves demo data intact)
+ * Clear all personal music data
  */
 export async function clearUserImportedData(): Promise<void> {
-  await db.transaction('rw', [db.artists, db.albums, db.tracks], async () => {
-    await db.artists.where('source').equals('user').delete();
-    await db.albums.where('source').equals('user').delete();
-    await db.tracks.where('source').equals('user').delete();
+  await db.transaction('rw', [db.artists, db.albums, db.tracks, db.relationships, db.clusters], async () => {
+    await db.artists.clear();
+    await db.albums.clear();
+    await db.tracks.clear();
+    await db.relationships.clear();
+    await db.clusters.clear();
   });
 }
 

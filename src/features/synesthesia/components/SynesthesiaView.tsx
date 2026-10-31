@@ -18,18 +18,26 @@ import {
   Minimize2,
   Eye,
   EyeOff,
+  Mic,
+  MicOff,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { AudioEngine, PlaybackState } from '../audio/audioEngine';
 import { SynesthesiaCanvas, SynesthesiaPresetType } from '../visuals/SynesthesiaCanvas';
 import { SynesthesiaRecorder } from '../recording/canvasRecorder';
+import { SpotifyAdapter, SpotifyCurrentlyPlaying } from '@/features/music/spotify/spotifyAdapter';
+import { Track } from '@/types';
 
 interface SynesthesiaViewProps {
+  tracks?: Track[];
   onReturnToUniverse: () => void;
   reducedMotion?: boolean;
 }
 
-export function SynesthesiaView({ onReturnToUniverse, reducedMotion = false }: SynesthesiaViewProps) {
-  const [preset, setPreset] = useState<SynesthesiaPresetType>('cosmic_pulse');
+export function SynesthesiaView({ tracks = [], onReturnToUniverse, reducedMotion = false }: SynesthesiaViewProps) {
+  const [preset, setPreset] = useState<SynesthesiaPresetType>('ethereal_nebula');
   const [playbackState, setPlaybackState] = useState<PlaybackState>('idle');
   const [sensitivity, setSensitivity] = useState(1.2);
   const [particleDensity, setParticleDensity] = useState(1.0);
@@ -46,6 +54,98 @@ export function SynesthesiaView({ onReturnToUniverse, reducedMotion = false }: S
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Live Spotify Playback & System Audio Reactivity State
+  const [spotifyPlayback, setSpotifyPlayback] = useState<SpotifyCurrentlyPlaying | null>(null);
+  const [isCapturingLiveAudio, setIsCapturingLiveAudio] = useState(false);
+  const [audioCaptureStatus, setAudioCaptureStatus] = useState<
+    'idle' | 'requesting' | 'active' | 'stopped' | 'error'
+  >('idle');
+  const [audioCaptureError, setAudioCaptureError] = useState<string | null>(null);
+
+  // Poll Spotify playback state every 3.5s
+  useEffect(() => {
+    let isMounted = true;
+    const adapter = new SpotifyAdapter();
+
+    const poll = async () => {
+      try {
+        const cur = await adapter.getCurrentlyPlaying();
+        if (isMounted) {
+          setSpotifyPlayback(cur);
+          if (cur.isPlaying && cur.trackTitle) {
+            setLoadedFileName(`${cur.trackTitle} • ${cur.artistName}`);
+          }
+        }
+      } catch {
+        // Ignore polling error
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 3500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleStartLiveAudioCapture = async () => {
+    setAudioCaptureStatus('requesting');
+    setAudioCaptureError(null);
+    try {
+      const engine = AudioEngine.getInstance();
+      let stream: MediaStream | null = null;
+
+      if (navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices) {
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+          });
+        } catch (displayErr) {
+          console.warn('getDisplayMedia attempt was cancelled or rejected:', displayErr);
+        }
+      }
+
+      if (!stream || stream.getAudioTracks().length === 0) {
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+      }
+
+      if (!stream || stream.getAudioTracks().length === 0) {
+        throw new Error('No audio stream detected. Ensure "Share audio" is toggled in the browser prompt.');
+      }
+
+      await engine.startSystemAudioCapture(stream);
+      setIsCapturingLiveAudio(true);
+      setAudioCaptureStatus('active');
+    } catch (err) {
+      console.error('Audio capture error:', err);
+      setAudioCaptureStatus('error');
+      setAudioCaptureError(
+        err instanceof Error ? err.message : 'Could not access audio stream. Please grant permission.'
+      );
+    }
+  };
+
+  const handleStopLiveAudioCapture = () => {
+    AudioEngine.getInstance().stopSystemAudioCapture();
+    setIsCapturingLiveAudio(false);
+    setAudioCaptureStatus('stopped');
+  };
 
   useEffect(() => {
     const engine = AudioEngine.getInstance();
@@ -89,6 +189,17 @@ export function SynesthesiaView({ onReturnToUniverse, reducedMotion = false }: S
       await AudioEngine.getInstance().play();
     } catch (err) {
       console.error('Audio file loading failed:', err);
+    }
+  };
+
+  const handleSelectSpotifyTrack = async (previewUrl: string, title: string) => {
+    try {
+      await AudioEngine.getInstance().loadAudioUrl(previewUrl);
+      setIsAudioLoaded(true);
+      setLoadedFileName(title);
+      await AudioEngine.getInstance().play();
+    } catch (err) {
+      console.error('Failed to load Spotify preview stream:', err);
     }
   };
 
@@ -142,11 +253,11 @@ export function SynesthesiaView({ onReturnToUniverse, reducedMotion = false }: S
   };
 
   const presetsList: Array<{ id: SynesthesiaPresetType; label: string }> = [
-    { id: 'cosmic_pulse', label: 'Cosmic Pulse' },
-    { id: 'nebula_flow', label: 'Nebula Flow' },
-    { id: 'stellar_geometry', label: 'Stellar Geometry' },
-    { id: 'black_hole_resonance', label: 'Black Hole' },
-    { id: 'aurora_dreamscape', label: 'Aurora' },
+    { id: 'ethereal_nebula', label: 'Ethereal Nebula (Ref A)' },
+    { id: 'spiral_resonance', label: 'Spiral Resonance (Ref B)' },
+    { id: 'stellar_geometry', label: 'Stellar Geometry (Ref C)' },
+    { id: 'cosmic_lightflow', label: 'Cosmic Lightflow (Ref D)' },
+    { id: 'singularity', label: 'Singularity (Ref E)' },
   ];
 
   return (
@@ -217,6 +328,89 @@ export function SynesthesiaView({ onReturnToUniverse, reducedMotion = false }: S
       {!zenMode && (
         <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-30 pointer-events-auto animate-in slide-in-from-bottom-2">
           <div className="p-4 rounded-2xl bg-surface/90 backdrop-blur-xl border border-border-subtle shadow-2xl space-y-3">
+            {/* Live Spotify Playback & System Audio Reactivity Banner (Part 6) */}
+            <div className="p-3 rounded-xl bg-surface-raised/80 border border-border-subtle/80 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {spotifyPlayback?.albumArtUrl ? (
+                    <img
+                      src={spotifyPlayback.albumArtUrl}
+                      alt={spotifyPlayback.albumName || 'Album Art'}
+                      className="w-9 h-9 rounded-lg object-cover border border-border-subtle flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center flex-shrink-0">
+                      <Music className="w-4 h-4 text-[#1DB954]" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface border border-border-subtle flex items-center gap-1">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            isCapturingLiveAudio
+                              ? 'bg-[#1DB954] animate-pulse'
+                              : spotifyPlayback?.isPlaying
+                              ? 'bg-accent-cyan'
+                              : 'bg-text-muted'
+                          }`}
+                        />
+                        {isCapturingLiveAudio
+                          ? 'Audio-Reactive Active'
+                          : spotifyPlayback?.isPlaying
+                          ? 'Spotify Playing'
+                          : 'Spotify Idle'}
+                      </span>
+
+                      {spotifyPlayback?.deviceName && (
+                        <span className="text-[10px] text-text-muted font-mono truncate hidden sm:inline">
+                          via {spotifyPlayback.deviceName}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs font-semibold text-text-primary truncate mt-0.5">
+                      {spotifyPlayback?.trackTitle || 'No active track playing on Spotify'}
+                    </p>
+                    {spotifyPlayback?.artistName && (
+                      <p className="text-[10px] text-text-muted truncate">{spotifyPlayback.artistName}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {isCapturingLiveAudio ? (
+                    <button
+                      type="button"
+                      onClick={handleStopLiveAudioCapture}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 text-xs font-mono transition-colors cursor-pointer"
+                    >
+                      <MicOff className="w-3.5 h-3.5" />
+                      <span>Stop Capture</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleStartLiveAudioCapture}
+                      disabled={audioCaptureStatus === 'requesting'}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-semibold text-xs font-mono transition-all shadow-[0_0_12px_rgba(29,185,84,0.3)] cursor-pointer"
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>{audioCaptureStatus === 'requesting' ? 'Requesting...' : 'Sync Live Audio'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {audioCaptureError && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-[11px] text-red-300">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                  <span>{audioCaptureError}</span>
+                </div>
+              )}
+            </div>
+
             {/* Audio Transport Row */}
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -284,6 +478,27 @@ export function SynesthesiaView({ onReturnToUniverse, reducedMotion = false }: S
                   <Music className="w-3.5 h-3.5 text-accent-amber" />
                   <span>Cosmic Synth</span>
                 </button>
+
+                {tracks.some((t) => Boolean(t.previewUrl)) && (
+                  <select
+                    onChange={(e) => {
+                      const trk = tracks.find((t) => t.id === e.target.value);
+                      if (trk?.previewUrl) {
+                        handleSelectSpotifyTrack(trk.previewUrl, trk.title);
+                      }
+                    }}
+                    defaultValue=""
+                    className="px-2.5 py-1.5 rounded-lg bg-surface-raised border border-accent-cyan/30 text-xs text-accent-cyan font-mono focus:outline-none cursor-pointer max-w-[180px] truncate"
+                    title="Select a real Spotify preview audio stream from your library"
+                  >
+                    <option value="" disabled>Play Spotify Track...</option>
+                    {tracks.filter((t) => Boolean(t.previewUrl)).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Fullscreen & Video Recording */}

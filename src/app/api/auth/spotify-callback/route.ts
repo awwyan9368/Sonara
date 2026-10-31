@@ -43,14 +43,18 @@ export async function GET(request: NextRequest) {
           const error = ${JSON.stringify(error)};
           
           if (code && state) {
-            window.opener?.postMessage({ type: 'SPOTIFY_AUTH_SUCCESS', code, state }, window.location.origin);
-            setTimeout(() => {
-              window.location.href = '/';
-            }, 1000);
+            if (window.opener) {
+              try {
+                window.opener.postMessage({ type: 'SPOTIFY_AUTH_SUCCESS', code, state }, window.location.origin);
+              } catch (e) {}
+              setTimeout(() => { window.close(); }, 600);
+            } else {
+              window.location.href = '/?spotify_code=' + encodeURIComponent(code) + '&spotify_state=' + encodeURIComponent(state);
+            }
           } else {
             setTimeout(() => {
-              window.location.href = '/';
-            }, 2000);
+              window.location.href = '/?spotify_error=' + encodeURIComponent(error || 'unknown');
+            }, 1500);
           }
         </script>
       </body>

@@ -24,6 +24,9 @@ export class AudioEngine {
   private gainNode: GainNode | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
+  private streamSourceNode: MediaStreamAudioSourceNode | null = null;
+  private currentMediaStream: MediaStream | null = null;
+  private isCapturingLiveAudio = false;
   private synthNodes: OscillatorNode[] = [];
   private synthInterval: number | null = null;
 
@@ -125,6 +128,103 @@ export class AudioEngine {
         audio.onerror = () => {
           this.setState('error');
           reject(new Error('Failed to decode local audio file.'));
+        };
+
+        this.setState('loading');
+      } catch (err) {
+        this.setState('error');
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Connects live desktop Spotify or system audio stream to Web Audio AnalyserNode.
+   * Connects strictly to analyser (never to audioCtx.destination), preventing feedback loops.
+   */
+  public async startSystemAudioCapture(stream: MediaStream): Promise<void> {
+    await this.initContext();
+    if (!this.audioCtx || !this.analyser) {
+      throw new Error('Web Audio Context not available');
+    }
+
+    this.stopProceduralSynth();
+    if (this.audioElement) {
+      this.audioElement.pause();
+    }
+
+    this.stopSystemAudioCapture();
+
+    this.currentMediaStream = stream;
+    this.streamSourceNode = this.audioCtx.createMediaStreamSource(stream);
+    this.streamSourceNode.connect(this.analyser);
+    this.isCapturingLiveAudio = true;
+
+    // Detect when user stops sharing via browser stop button
+    stream.getAudioTracks().forEach((track) => {
+      track.onended = () => {
+        this.stopSystemAudioCapture();
+      };
+    });
+
+    this.setState('playing');
+  }
+
+  public stopSystemAudioCapture(): void {
+    if (this.streamSourceNode) {
+      try {
+        this.streamSourceNode.disconnect();
+      } catch {
+        // Disconnect silently
+      }
+      this.streamSourceNode = null;
+    }
+
+    if (this.currentMediaStream) {
+      try {
+        this.currentMediaStream.getTracks().forEach((t) => t.stop());
+      } catch {
+        // Stop silently
+      }
+      this.currentMediaStream = null;
+    }
+
+    this.isCapturingLiveAudio = false;
+    this.setState('idle');
+  }
+
+  public getIsCapturingLiveAudio(): boolean {
+    return this.isCapturingLiveAudio;
+  }
+
+  public async loadAudioUrl(url: string): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        await this.initContext();
+        this.stopProceduralSynth();
+
+        if (this.audioElement) {
+          this.audioElement.pause();
+          this.audioElement.src = '';
+        }
+
+        const audio = new Audio();
+        audio.crossOrigin = 'anonymous';
+        audio.src = url;
+
+        audio.oncanplay = () => {
+          if (!this.sourceNode && this.analyser) {
+            this.sourceNode = this.audioCtx!.createMediaElementSource(audio);
+            this.sourceNode.connect(this.analyser);
+          }
+          this.audioElement = audio;
+          this.setState('idle');
+          resolve();
+        };
+
+        audio.onerror = () => {
+          this.setState('error');
+          reject(new Error('Failed to load audio stream from URL.'));
         };
 
         this.setState('loading');
@@ -420,6 +520,7 @@ export class AudioEngine {
   }
 
   public dispose(): void {
+    this.stopSystemAudioCapture();
     this.stopProceduralSynth();
     if (this.audioElement) {
       this.audioElement.pause();

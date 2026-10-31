@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MusicGraph } from '@/lib/graph/pathfinding';
-import { DEMO_RELATIONSHIPS } from '@/data/demo/universeData';
+import { DEMO_RELATIONSHIPS } from './fixtures/testUniverseData';
 
 describe('MusicGraph Pathfinding Engine', () => {
   const graph = new MusicGraph(DEMO_RELATIONSHIPS);

@@ -43,7 +43,7 @@ export function UniverseFallback({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {clusters.map((cluster) => {
               const memberArtists = artists.filter(
-                (a) => a.clusterId === cluster.id || cluster.memberArtistIds.includes(a.id)
+                (a) => a.clusterId === cluster.id || (cluster.memberArtistIds || []).includes(a.id)
               );
 
               return (

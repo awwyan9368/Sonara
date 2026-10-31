@@ -24,7 +24,7 @@ export function CameraController({
   const { camera } = useThree();
   const controlsRef = useRef<OrbitControlsImpl>(null);
 
-  const desiredPos = useRef<THREE.Vector3>(new THREE.Vector3(0, 35, 110));
+  const desiredPos = useRef<THREE.Vector3>(new THREE.Vector3(0, 85, 145));
   const desiredLookAt = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
   const isTransitioning = useRef(false);
 
@@ -42,7 +42,7 @@ export function CameraController({
   // Handle reset camera trigger
   useEffect(() => {
     if (resetTrigger !== undefined && resetTrigger > 0) {
-      desiredPos.current.set(0, 35, 110);
+      desiredPos.current.set(0, 85, 145);
       desiredLookAt.current.set(0, 0, 0);
       isTransitioning.current = true;
     }
@@ -52,18 +52,23 @@ export function CameraController({
     if (!controlsRef.current) return;
 
     if (isTransitioning.current) {
-      const lerpSpeed = reducedMotion ? 1.0 : Math.min(1.0, delta * 3.5);
+      const lerpSpeed = reducedMotion ? 1.0 : Math.min(1.0, delta * 4.5);
 
       camera.position.lerp(desiredPos.current, lerpSpeed);
       controlsRef.current.target.lerp(desiredLookAt.current, lerpSpeed);
-      controlsRef.current.update();
+      camera.lookAt(controlsRef.current.target);
 
       const distPos = camera.position.distanceTo(desiredPos.current);
       const distTarget = controlsRef.current.target.distanceTo(desiredLookAt.current);
 
-      if (distPos < 0.2 && distTarget < 0.2) {
+      if (distPos < 0.05 && distTarget < 0.05) {
+        camera.position.copy(desiredPos.current);
+        controlsRef.current.target.copy(desiredLookAt.current);
+        controlsRef.current.update();
         isTransitioning.current = false;
       }
+    } else {
+      controlsRef.current.update();
     }
   });
 
@@ -75,7 +80,7 @@ export function CameraController({
       rotateSpeed={0.6 * sensitivity}
       zoomSpeed={0.8 * sensitivity}
       panSpeed={0.7 * sensitivity}
-      minDistance={10}
+      minDistance={1.2}
       maxDistance={350}
       makeDefault
     />

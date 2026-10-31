@@ -22,29 +22,33 @@ export function Constellations({
   const pulsesRef = useRef<THREE.Points>(null);
   const artistMap = useMemo(() => new Map(artists.map((a) => [a.id, a])), [artists]);
 
-  // Standard relationship lines
+  // Standard relationship lines (Only visible when an artist is actively selected or hovered)
   const { linePositions, lineColors } = useMemo(() => {
+    // If no artist is selected, don't draw the spiderweb across the whole galaxy
+    if (!selectedArtistId) {
+      return {
+        linePositions: new Float32Array(0),
+        lineColors: new Float32Array(0),
+      };
+    }
+
     const pos: number[] = [];
     const cols: number[] = [];
-
-    const baseColor = new THREE.Color('#3A4560');
-    const directColor = new THREE.Color('#8C6CFF');
+    const directColor = new THREE.Color('#00F0FF'); // Luminous cyan relational filaments
 
     for (const rel of relationships) {
+      // Strictly only lines connected to the selected artist
+      if (rel.sourceId !== selectedArtistId && rel.targetId !== selectedArtistId) continue;
+
       const a1 = artistMap.get(rel.sourceId);
       const a2 = artistMap.get(rel.targetId);
       if (!a1?.position || !a2?.position) continue;
 
-      const isConnectedToSelected =
-        selectedArtistId && (rel.sourceId === selectedArtistId || rel.targetId === selectedArtistId);
-
-      const color = isConnectedToSelected ? directColor : baseColor;
-
       pos.push(a1.position[0], a1.position[1], a1.position[2]);
       pos.push(a2.position[0], a2.position[1], a2.position[2]);
 
-      cols.push(color.r, color.g, color.b);
-      cols.push(color.r, color.g, color.b);
+      cols.push(directColor.r, directColor.g, directColor.b);
+      cols.push(directColor.r, directColor.g, directColor.b);
     }
 
     return {

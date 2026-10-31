@@ -4,6 +4,11 @@ import {
   getProceduralPlanetTexture,
   getProceduralRingTexture,
 } from '@/features/universe/shaders/planetTextures';
+import {
+  getStarParticleTexture,
+  getNebulaDustTexture,
+  getCrossSpikeTexture,
+} from '@/features/universe/shaders/particleTextures';
 
 describe('Advanced Graphics & Audio Pipeline', () => {
   it('audio engine calculates 7 frequency bands and transient metrics cleanly', () => {
@@ -44,6 +49,21 @@ describe('Advanced Graphics & Audio Pipeline', () => {
     // Cache lookup should return same instance
     const tex1Cached = getProceduralPlanetTexture('gas_giant', 101, 128);
     expect(tex1Cached).toBe(tex1);
+  });
+
+  it('generates and caches celestial particle and cross diffraction spike textures', () => {
+    const starTex = getStarParticleTexture();
+    const nebulaTex = getNebulaDustTexture();
+    const spikeTex = getCrossSpikeTexture();
+
+    expect(starTex).toBeDefined();
+    expect(nebulaTex).toBeDefined();
+    expect(spikeTex).toBeDefined();
+
+    // Cache verification
+    expect(getCrossSpikeTexture()).toBe(spikeTex);
+    expect(getStarParticleTexture()).toBe(starTex);
+    expect(getNebulaDustTexture()).toBe(nebulaTex);
   });
 });
 

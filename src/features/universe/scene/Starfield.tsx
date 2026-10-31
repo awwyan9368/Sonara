@@ -3,6 +3,7 @@
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { getStarParticleTexture, getNebulaDustTexture } from '../shaders/particleTextures';
 
 interface StarfieldProps {
   count?: number;
@@ -173,6 +174,9 @@ export function Starfield({ count = 3500, quality = 'high', reducedMotion = fals
     }
   });
 
+  const starTexture = useMemo(() => getStarParticleTexture(), []);
+  const galaxyTexture = useMemo(() => getNebulaDustTexture(), []);
+
   return (
     <group name="deep-astronomical-starfield">
       {/* Layer A: Ultra-Distant Cosmic Background */}
@@ -183,7 +187,8 @@ export function Starfield({ count = 3500, quality = 'high', reducedMotion = fals
           <bufferAttribute attach="attributes-size" args={[layerA.sz, 1]} />
         </bufferGeometry>
         <pointsMaterial
-          size={1.2}
+          map={starTexture}
+          size={1.5}
           vertexColors
           transparent
           opacity={0.7}
@@ -201,7 +206,8 @@ export function Starfield({ count = 3500, quality = 'high', reducedMotion = fals
           <bufferAttribute attach="attributes-size" args={[layerB.sz, 1]} />
         </bufferGeometry>
         <pointsMaterial
-          size={1.6}
+          map={starTexture}
+          size={2.0}
           vertexColors
           transparent
           opacity={0.85}
@@ -219,7 +225,8 @@ export function Starfield({ count = 3500, quality = 'high', reducedMotion = fals
           <bufferAttribute attach="attributes-size" args={[layerC.sz, 1]} />
         </bufferGeometry>
         <pointsMaterial
-          size={2.5}
+          map={starTexture}
+          size={2.8}
           vertexColors
           transparent
           opacity={0.95}
@@ -237,7 +244,8 @@ export function Starfield({ count = 3500, quality = 'high', reducedMotion = fals
           <bufferAttribute attach="attributes-size" args={[layerD.sz, 1]} />
         </bufferGeometry>
         <pointsMaterial
-          size={5.0}
+          map={galaxyTexture}
+          size={7.0}
           vertexColors
           transparent
           opacity={0.4}

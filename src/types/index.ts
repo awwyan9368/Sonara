@@ -19,6 +19,7 @@ export interface Artist {
   clusterId?: string;
   position?: [number, number, number];
   bio?: string;
+  classificationState?: 'verified_genre' | 'unclassified' | 'unavailable';
 }
 
 export interface Album {
@@ -29,6 +30,18 @@ export interface Album {
   artworkUrl?: string;
   source: EntitySource;
 }
+
+export type PlanetArchetype =
+  | 'terrestrial'
+  | 'gas_giant'
+  | 'ice_world'
+  | 'lava_world'
+  | 'barren_moon'
+  | 'polar_vortex'
+  | 'golden_swirl'
+  | 'aurora_oceanic'
+  | 'ultraviolet_storm'
+  | 'cratered_multispectral';
 
 export interface TrackAudioFeatures {
   danceability?: number;
@@ -53,6 +66,15 @@ export interface Track {
   planetColor?: string;
   planetSize?: number;
   hasRings?: boolean;
+  archetype?: PlanetArchetype;
+  playCount?: number;
+  isFrequencyAvailable?: boolean;
+  externalUrls?: Record<string, string>;
+  spotifyUri?: string;
+  popularity?: number;
+  classificationState?: 'verified_genre' | 'unclassified' | 'unavailable';
+  parentClusterId?: string;
+  position?: [number, number, number];
 }
 
 export interface Genre {

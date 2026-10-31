@@ -1,30 +1,36 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Artist,
+  Album,
   Track,
   Relationship,
   TasteCluster,
   Journey,
   UserPreferences,
+  MusicUniverseData,
 } from '@/types';
-import { DEMO_UNIVERSE_DATA } from '@/data/demo/universeData';
 import {
   db,
   initializeDatabase,
+  saveSpotifyUniverseData,
   DEFAULT_PREFERENCES,
 } from '@/lib/storage/db';
 import { NavRail, ActiveTab } from '@/components/navigation/NavRail';
 import { GlobalSearch } from '@/components/controls/GlobalSearch';
 import { ArtistDetailPanel } from '@/components/panels/ArtistDetailPanel';
+import { TrackDetailPanel } from '@/components/panels/TrackDetailPanel';
+import { CosmicLegend } from '@/components/controls/CosmicLegend';
 import { CosmicJourneyPanel } from '@/features/journeys/CosmicJourneyPanel';
 import { TasteDnaView } from '@/features/tastedna/components/TasteDnaView';
 import { SynesthesiaView } from '@/features/synesthesia/components/SynesthesiaView';
 import { LibraryView } from '@/features/library/LibraryView';
 import { SettingsView } from '@/features/settings/SettingsView';
-import { RotateCcw, Compass, Route } from 'lucide-react';
+import { SpotifyAdapter } from '@/features/music/spotify/spotifyAdapter';
+import { alignUniverseToMasterSpiralGalaxy } from '@/features/music/spotify/spotifyMapper';
+import { RotateCcw, Compass, Route, Sparkles } from 'lucide-react';
 
 // Dynamic import with SSR disabled for Three.js canvas to avoid hydration errors
 const UniverseCanvas = dynamic(
@@ -37,15 +43,13 @@ const UniverseCanvas = dynamic(
 
 export default function SonaraMainPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('explore');
-  const [artists, setArtists] = useState<Artist[]>(DEMO_UNIVERSE_DATA.artists);
-  const [tracks, setTracks] = useState<Track[]>(DEMO_UNIVERSE_DATA.tracks);
-  const [relationships, setRelationships] = useState<Relationship[]>(
-    DEMO_UNIVERSE_DATA.relationships
-  );
-  const [clusters, setClusters] = useState<TasteCluster[]>(
-    DEMO_UNIVERSE_DATA.clusters
-  );
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [clusters, setClusters] = useState<TasteCluster[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState<boolean>(false);
 
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
@@ -55,37 +59,153 @@ export default function SonaraMainPage() {
   const [journeyStartArtist, setJourneyStartArtist] = useState<Artist | null>(null);
 
   const [resetCameraTrigger, setResetCameraTrigger] = useState(0);
+  const [isSyncingDirect, setIsSyncingDirect] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const handleDirectSync = async () => {
+    setIsSyncingDirect(true);
+    setSyncError(null);
+    try {
+      const adapter = new SpotifyAdapter();
+      const universe = await adapter.getUniverseData(true);
+      if (universe.artists.length > 0) {
+        await saveSpotifyUniverseData(universe);
+        setArtists(universe.artists);
+        setTracks(universe.tracks);
+        setRelationships(universe.relationships);
+        setClusters(universe.clusters);
+        setAlbums(universe.albums);
+      } else {
+        setSyncError('Spotify library query returned 0 items. Ensure you have played music on your Spotify account.');
+      }
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSyncingDirect(false);
+    }
+  };
 
   // Initialize DB and load data
   useEffect(() => {
     async function setup() {
       await initializeDatabase();
       try {
-        const [a, t, r, c, prefRecord] = await Promise.all([
+        const [a, t, r, c, alb, prefRecord] = await Promise.all([
           db.artists.toArray(),
           db.tracks.toArray(),
           db.relationships.toArray(),
           db.clusters.toArray(),
+          db.albums.toArray(),
           db.preferences.get('user_prefs'),
         ]);
 
-        if (a.length > 0) setArtists(a);
-        if (t.length > 0) setTracks(t);
+        if (a.length > 0) {
+          // Align all artists and song planets to sit seamlessly within the master spiral galaxy
+          const aligned = alignUniverseToMasterSpiralGalaxy(a, t, c);
+          setArtists(aligned.artists);
+          setTracks(aligned.tracks);
+          setClusters(aligned.clusters);
+
+          // Persist aligned positions into IndexedDB asynchronously
+          db.artists.bulkPut(aligned.artists).catch(console.warn);
+          db.tracks.bulkPut(aligned.tracks).catch(console.warn);
+          db.clusters.bulkPut(aligned.clusters).catch(console.warn);
+        }
         if (r.length > 0) setRelationships(r);
-        if (c.length > 0) setClusters(c);
+        if (alb.length > 0) setAlbums(alb);
+
         if (prefRecord) {
           const { id: _, ...p } = prefRecord;
           setPreferences((prev) => ({ ...prev, ...p }));
         }
+
+        const adapter = new SpotifyAdapter();
+        const status = await adapter.getStatus();
+        setIsSpotifyConnected(status.connected);
+
+        // If local database is empty but Spotify session is valid, auto-import Spotify universe
+        if (a.length === 0 && status.connected) {
+          const universe = await adapter.getUniverseData();
+          if (universe.artists.length > 0) {
+            await saveSpotifyUniverseData(universe);
+            setArtists(universe.artists);
+            setTracks(universe.tracks);
+            setRelationships(universe.relationships);
+            setClusters(universe.clusters);
+            setAlbums(universe.albums);
+          }
+        }
       } catch (err) {
-        console.warn('Using bundled demo data:', err);
+        console.warn('Database initialization check:', err);
       }
     }
     setup();
   }, []);
 
+  // Ensure origin is normalized to 127.0.0.1 to avoid split local storage with Spotify OAuth
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      window.location.replace(window.location.href.replace('//localhost:', '//127.0.0.1:'));
+    }
+  }, []);
+
+  const authProcessingRef = useRef(false);
+
+  // Listen for Spotify OAuth callback either via redirect query params or window message
+  useEffect(() => {
+    async function handleAuthCode(code: string, state: string) {
+      if (authProcessingRef.current) return;
+      authProcessingRef.current = true;
+
+      try {
+        const adapter = new SpotifyAdapter();
+        await adapter.handleAuthCallback(code, state);
+        const data = await adapter.getUniverseData();
+        if (data.artists.length > 0) {
+          await saveSpotifyUniverseData(data);
+          setArtists(data.artists);
+          setTracks(data.tracks);
+          setRelationships(data.relationships);
+          setClusters(data.clusters);
+          setAlbums(data.albums);
+          setIsSpotifyConnected(true);
+        }
+        alert(
+          `Spotify connected successfully! Mapped ${data.artists.length} artists across ${data.clusters.length} galaxies with ${data.tracks.length} planetary tracks.`
+        );
+      } catch (err) {
+        console.error('Spotify auth exchange failed:', err);
+        alert('Spotify authentication failed: ' + String(err));
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('spotify_code');
+      const state = params.get('spotify_state');
+      if (code && state) {
+        window.history.replaceState({}, '', window.location.pathname);
+        handleAuthCode(code, state);
+      }
+    }
+
+    function handleMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'SPOTIFY_AUTH_SUCCESS') {
+        const { code, state } = e.data;
+        if (code && state) {
+          handleAuthCode(code, state);
+        }
+      }
+    }
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const handleSelectArtist = (artist: Artist) => {
     setSelectedArtist(artist);
+    setSelectedTrack(null);
     setSelectedClusterId(artist.clusterId || null);
     if (activeTab !== 'explore') {
       setActiveTab('explore');
@@ -95,6 +215,7 @@ export default function SonaraMainPage() {
   const handleSelectCluster = (clusterId: string) => {
     setSelectedClusterId(clusterId);
     setSelectedArtist(null);
+    setSelectedTrack(null);
     if (activeTab !== 'explore') {
       setActiveTab('explore');
     }
@@ -102,11 +223,39 @@ export default function SonaraMainPage() {
 
   const handleSelectTrack = (track: Track) => {
     setSelectedTrack(track);
-    const parentArtist = artists.find((a) => track.artistIds.includes(a.id));
-    if (parentArtist) {
-      setSelectedArtist(parentArtist);
+    setSelectedArtist(null);
+    if (track.position) {
+      setTracks((prev) => prev.map((t) => (t.id === track.id ? { ...t, position: track.position } : t)));
+    }
+    if (track.parentClusterId) {
+      setSelectedClusterId(track.parentClusterId);
+    }
+    if (activeTab !== 'explore') {
+      setActiveTab('explore');
     }
   };
+
+  // Expose global selection helpers for automated visual verification and external deep-linking
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __sonaraSelectTrack?: (id: string) => void }).__sonaraSelectTrack = (trackId: string) => {
+        const trk = tracks.find((t) => t.id === trackId);
+        if (trk) handleSelectTrack(trk);
+      };
+      (window as unknown as { __sonaraSelectArtist?: (id: string) => void }).__sonaraSelectArtist = (artistId: string) => {
+        const art = artists.find((a) => a.id === artistId);
+        if (art) handleSelectArtist(art);
+      };
+      (window as unknown as { __sonaraLoadUniverseData?: (data: MusicUniverseData) => Promise<void> }).__sonaraLoadUniverseData = async (data: MusicUniverseData) => {
+        await saveSpotifyUniverseData(data);
+        setArtists(data.artists);
+        setAlbums(data.albums);
+        setTracks(data.tracks);
+        setRelationships(data.relationships);
+        setClusters(data.clusters);
+      };
+    }
+  }, [tracks, artists]);
 
   const handleStartJourney = (startArtist: Artist) => {
     setJourneyStartArtist(startArtist);
@@ -142,7 +291,7 @@ export default function SonaraMainPage() {
             setActiveTab('explore');
           }
         }}
-        isDemoMode={true}
+        isSpotifyConnected={isSpotifyConnected}
       />
 
       {/* Main View Area */}
@@ -167,13 +316,62 @@ export default function SonaraMainPage() {
               onSelectTrack={handleSelectTrack}
             />
 
+            {/* Empty Cosmos State */}
+            {artists.length === 0 && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center p-6 pointer-events-none">
+                <div className="max-w-md w-full p-8 rounded-2xl bg-surface/90 border border-border-subtle shadow-2xl backdrop-blur-xl text-center space-y-5 pointer-events-auto animate-in fade-in zoom-in-95 duration-500">
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-[#1DB954]/15 border border-[#1DB954]/40 flex items-center justify-center shadow-[0_0_25px_rgba(29,185,84,0.25)]">
+                    <Sparkles className="w-7 h-7 text-[#1DB954]" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-text-primary tracking-tight">
+                      {isSpotifyConnected ? 'Your SoundGalaxy is Ready to Map' : 'Generate Your SoundGalaxy'}
+                    </h2>
+                    <p className="text-xs text-text-secondary mt-2 leading-relaxed">
+                      {isSpotifyConnected
+                        ? 'Your Spotify account is authenticated. Synchronize your listening history to generate your dynamic spiral galaxies, star systems, and orbiting planets.'
+                        : 'Connect your Spotify account in Settings to generate your personal astronomical universe from your listening history.'}
+                    </p>
+                  </div>
+
+                  {syncError && (
+                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 text-left">
+                      {syncError}
+                    </div>
+                  )}
+
+                  {isSpotifyConnected ? (
+                    <button
+                      type="button"
+                      onClick={handleDirectSync}
+                      disabled={isSyncingDirect}
+                      className="w-full py-3 px-4 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-bold text-xs font-mono uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(29,185,84,0.3)] cursor-pointer"
+                    >
+                      {isSyncingDirect ? 'Synchronizing Spotify Universe...' : 'Sync Spotify Library Now'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('settings')}
+                      className="w-full py-3 px-4 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs font-mono uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(29,185,84,0.3)] cursor-pointer"
+                    >
+                      Connect Spotify in Settings
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Cosmic Legend Explaining Celestial Rules */}
+            <CosmicLegend />
+
             {/* Top Minimal Toolbar Controls */}
             <div className="absolute top-5 left-5 right-5 flex items-center justify-between pointer-events-none z-30">
               <div className="pointer-events-auto">
                 <GlobalSearch
                   artists={artists}
                   tracks={tracks}
-                  albums={[]}
+                  albums={albums}
                   clusters={clusters}
                   onSelectArtist={handleSelectArtist}
                   onSelectTrack={handleSelectTrack}
@@ -224,6 +422,18 @@ export default function SonaraMainPage() {
               />
             )}
 
+            {/* Contextual Track Detail Panel */}
+            {selectedTrack && !selectedArtist && !isJourneyPanelOpen && (
+              <TrackDetailPanel
+                track={selectedTrack}
+                artist={artists.find((a) => selectedTrack.artistIds.includes(a.id)) || null}
+                album={albums.find((alb) => alb.id === selectedTrack.albumId) || null}
+                cluster={clusters.find((c) => c.id === selectedTrack.parentClusterId) || null}
+                onClose={() => setSelectedTrack(null)}
+                onSelectArtist={handleSelectArtist}
+              />
+            )}
+
             {/* Cosmic Journey Stepper Panel */}
             {isJourneyPanelOpen && (
               <CosmicJourneyPanel
@@ -259,6 +469,7 @@ export default function SonaraMainPage() {
         {/* VIEW: SYNESTHESIA */}
         {activeTab === 'synesthesia' && (
           <SynesthesiaView
+            tracks={tracks}
             onReturnToUniverse={() => setActiveTab('explore')}
             reducedMotion={preferences.reducedMotion}
           />
@@ -281,6 +492,14 @@ export default function SonaraMainPage() {
             preferences={preferences}
             onUpdatePreferences={setPreferences}
             onResetCamera={handleResetCamera}
+            onSyncUniverse={(data) => {
+              setArtists(data.artists);
+              setTracks(data.tracks);
+              setRelationships(data.relationships);
+              setClusters(data.clusters);
+              setAlbums(data.albums);
+              setIsSpotifyConnected(true);
+            }}
           />
         )}
       </main>

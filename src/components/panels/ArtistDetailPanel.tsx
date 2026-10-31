@@ -30,7 +30,7 @@ export function ArtistDetailPanel({
   if (!artist) return null;
 
   const cluster = clusters.find((c) => c.id === artist.clusterId);
-  const artistTracks = tracks.filter((t) => t.artistIds.includes(artist.id));
+  const artistTracks = tracks.filter((t) => (t.artistIds || []).includes(artist.id));
 
   // Find relationships involving this artist
   const artistMap = new Map(allArtists.map((a) => [a.id, a]));
@@ -100,7 +100,7 @@ export function ArtistDetailPanel({
             Harmonic Spectra (Genres)
           </h4>
           <div className="flex flex-wrap gap-1.5">
-            {artist.genres.map((genre) => (
+            {(artist.genres || []).map((genre) => (
               <span
                 key={genre}
                 className="px-2.5 py-1 rounded-md text-xs font-mono bg-surface-raised border border-border-subtle text-text-secondary"

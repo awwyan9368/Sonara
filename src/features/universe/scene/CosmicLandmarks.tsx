@@ -3,6 +3,7 @@
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { getStarParticleTexture } from '../shaders/particleTextures';
 
 interface CosmicLandmarksProps {
   reducedMotion?: boolean;
@@ -200,7 +201,8 @@ export function CosmicLandmarks({ reducedMotion = false }: CosmicLandmarksProps)
           <bufferAttribute attach="attributes-size" args={[asteroids.sz, 1]} />
         </bufferGeometry>
         <pointsMaterial
-          size={1.8}
+          map={getStarParticleTexture()}
+          size={1.6}
           vertexColors
           transparent
           opacity={0.65}

@@ -135,7 +135,7 @@ export function analyzeTasteDna(
   // 2. Cluster breakdowns
   const clusterBreakdowns: ClusterBreakdown[] = clusters.map((cluster) => {
     const memberArtists = artists.filter(
-      (a) => a.clusterId === cluster.id || cluster.memberArtistIds.includes(a.id)
+      (a) => a.clusterId === cluster.id || (cluster.memberArtistIds || []).includes(a.id)
     );
     const percentage = totalArtists > 0 ? Math.round((memberArtists.length / totalArtists) * 1000) / 10 : 0;
     const sortedMembers = [...memberArtists].sort((a, b) => b.prominence - a.prominence);

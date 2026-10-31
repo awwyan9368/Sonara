@@ -9,7 +9,7 @@ import {
   DEMO_TRACKS,
   DEMO_RELATIONSHIPS,
   DEMO_CLUSTERS,
-} from '@/data/demo/universeData';
+} from './fixtures/testUniverseData';
 
 describe('TasteDNA Intelligence Engine', () => {
   it('calculates Simpson diversity index correctly', () => {

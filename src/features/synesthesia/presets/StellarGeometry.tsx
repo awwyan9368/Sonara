@@ -4,6 +4,7 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/audioEngine';
+import { getStarParticleTexture, getEnergySparkTexture } from '../../universe/shaders/particleTextures';
 
 interface StellarGeometryProps {
   sensitivity?: number;
@@ -11,173 +12,206 @@ interface StellarGeometryProps {
   reducedMotion?: boolean;
 }
 
+/**
+ * PRESET 5 — STELLAR GEOMETRY (Reference C)
+ * High-contrast central cosmic structure.
+ * - Blindingly bright central stellar source with crisp four-point cross-spikes.
+ * - Intricate dark curved filamentary webbing / silhouette cage (Dyson sphere lattice).
+ * - Dense surrounding field of starlight with extreme black-and-white contrast.
+ */
 export function StellarGeometry({
   sensitivity = 1.0,
+  particleDensity = 1.0,
   reducedMotion = false,
 }: StellarGeometryProps) {
-  const outerPolyRef = useRef<THREE.Mesh>(null);
-  const midPolyRef = useRef<THREE.Mesh>(null);
-  const innerPolyRef = useRef<THREE.Mesh>(null);
-  const geodesicRingRef = useRef<THREE.LineSegments>(null);
-  const orbitingNodesRef = useRef<THREE.Points>(null);
+  const centralStarRef = useRef<THREE.Mesh>(null);
+  const coreCrossHRef = useRef<THREE.Mesh>(null);
+  const coreCrossVRef = useRef<THREE.Mesh>(null);
+  const webbingGroupRef = useRef<THREE.Group>(null);
+  const starlightFieldRef = useRef<THREE.Points>(null);
 
-  // Parametric Geodesic Orbiting Nodes
-  const { nodePositions, nodeColors } = useMemo(() => {
-    const count = 360;
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
+  const starTexture = useMemo(() => getStarParticleTexture(), []);
+  const sparkTexture = useMemo(() => getEnergySparkTexture(), []);
 
-    for (let i = 0; i < count; i++) {
-      const u = (i / count) * Math.PI * 4;
-      const v = (i / count) * Math.PI * 2;
-      // Viviani's curve / spherical trefoil
-      const r = 13.5;
-      pos[i * 3] = r * (1 + Math.cos(u)) * Math.cos(v) * 0.5;
-      pos[i * 3 + 1] = r * Math.sin(u) * 0.7;
-      pos[i * 3 + 2] = r * (1 + Math.cos(u)) * Math.sin(v) * 0.5;
+  const starlightCount = Math.floor(3200 * particleDensity);
 
-      // Cyan to Gold gradient
-      col[i * 3] = 0.4 + (i / count) * 0.5;
-      col[i * 3 + 1] = 0.8;
-      col[i * 3 + 2] = 1.0 - (i / count) * 0.4;
+  // 1. High-Contrast Dense Spherical Starlight Field (Reference C)
+  const { starPositions, starOrigPos, starSizes } = useMemo(() => {
+    const pos = new Float32Array(starlightCount * 3);
+    const orig = new Float32Array(starlightCount * 3);
+    const sz = new Float32Array(starlightCount);
+
+    const maxR = 34.0;
+    const innerVoidR = 8.0;
+
+    for (let i = 0; i < starlightCount; i++) {
+      const i3 = i * 3;
+      const u = Math.pow(Math.random(), 1.4);
+      const r = innerVoidR + u * (maxR - innerVoidR);
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.cos(phi);
+      const z = r * Math.sin(phi) * Math.sin(theta);
+
+      pos[i3] = x;
+      pos[i3 + 1] = y;
+      pos[i3 + 2] = z;
+
+      orig[i3] = x;
+      orig[i3 + 1] = y;
+      orig[i3 + 2] = z;
+
+      sz[i] = 0.8 + Math.random() * 1.5;
     }
 
-    return { nodePositions: pos, nodeColors: col };
-  }, []);
+    return { starPositions: pos, starOrigPos: orig, starSizes: sz };
+  }, [starlightCount]);
 
-  // Geodesic Wireframe Circle Network
-  const circleLines = useMemo(() => {
-    const segments = 120;
-    const pos: number[] = [];
+  // 2. Intricate Dark Curved Webbing / Filament Silhouettes (Dyson Sphere Lattice)
+  const webbingLines = useMemo(() => {
+    const lines: THREE.Line[] = [];
+    const numArches = 12;
+    const segments = 64;
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x0a0d14,
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.92,
+    });
 
-    const addRing = (rad: number, rotX: number, rotY: number) => {
-      for (let i = 0; i < segments; i++) {
-        const a1 = (i / segments) * Math.PI * 2;
-        const a2 = ((i + 1) / segments) * Math.PI * 2;
-        const p1 = new THREE.Vector3(Math.cos(a1) * rad, Math.sin(a1) * rad, 0);
-        const p2 = new THREE.Vector3(Math.cos(a2) * rad, Math.sin(a2) * rad, 0);
-        p1.applyAxisAngle(new THREE.Vector3(1, 0, 0), rotX);
-        p1.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
-        p2.applyAxisAngle(new THREE.Vector3(1, 0, 0), rotX);
-        p2.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
-        pos.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+    for (let a = 0; a < numArches; a++) {
+      const pos: number[] = [];
+      const baseAngle = (a / numArches) * Math.PI * 2;
+      const tilt = (a % 3 - 1) * 0.45;
+
+      for (let s = 0; s <= segments; s++) {
+        const t = (s / segments) * Math.PI; // 0 to PI
+        const r = 11.5 + Math.sin(t * 3.0) * 1.8;
+        const theta = baseAngle + Math.sin(t) * 0.7;
+
+        const x = r * Math.sin(t) * Math.cos(theta);
+        const y = r * Math.cos(t) * (1.0 + tilt * 0.3);
+        const z = r * Math.sin(t) * Math.sin(theta);
+
+        pos.push(x, y, z);
       }
-    };
 
-    addRing(15, 0, 0);
-    addRing(15, Math.PI / 3, Math.PI / 4);
-    addRing(15, -Math.PI / 3, -Math.PI / 4);
-    addRing(15, Math.PI / 2, 0);
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-    return geo;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      lines.push(new THREE.Line(geo, mat));
+    }
+    return lines;
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const metrics = AudioEngine.getInstance().getEnergyMetrics(sensitivity);
+    const time = state.clock.getElapsedTime();
 
-    // 1. Outer Icosahedral Lattice
-    if (outerPolyRef.current && !reducedMotion) {
-      outerPolyRef.current.rotation.x += delta * (0.2 + metrics.bass * 0.5);
-      outerPolyRef.current.rotation.y += delta * (0.15 + metrics.mid * 0.4);
-      const s = 1.0 + metrics.subBass * 0.45;
-      outerPolyRef.current.scale.set(s, s, s);
+    // 1. Blinding Central Star Pulsing on Sub-bass
+    if (centralStarRef.current) {
+      const s = 1.0 + metrics.subBass * 0.35 + metrics.transient * 0.4;
+      centralStarRef.current.scale.set(s, s, s);
     }
 
-    // 2. Middle Octahedron Ring
-    if (midPolyRef.current && !reducedMotion) {
-      midPolyRef.current.rotation.y -= delta * (0.3 + metrics.treble * 0.6);
-      midPolyRef.current.rotation.z += delta * (0.25 + metrics.lowMid * 0.4);
-      const s = 1.0 + metrics.mid * 0.5;
-      midPolyRef.current.scale.set(s, s, s);
+    // 2. Cross-Spike Flare Modulation on Treble & Transients
+    if (coreCrossHRef.current && coreCrossVRef.current) {
+      const flareLen = 1.0 + metrics.treble * 0.6 + metrics.transient * 0.8;
+      coreCrossHRef.current.scale.set(flareLen, 1.0, 1.0);
+      coreCrossVRef.current.scale.set(1.0, flareLen, 1.0);
     }
 
-    // 3. Inner Dodecahedral Pulsing Core
-    if (innerPolyRef.current) {
-      const s = 1.0 + metrics.bass * 0.8 + metrics.transient * 0.6;
-      innerPolyRef.current.scale.set(s, s, s);
+    // 3. Webbing Lattice Rotation and Flex
+    if (webbingGroupRef.current && !reducedMotion) {
+      webbingGroupRef.current.rotation.y += delta * 0.12;
+      webbingGroupRef.current.rotation.x = Math.sin(time * 0.4) * 0.15;
+      const latticeScale = 1.0 + metrics.bass * 0.12;
+      webbingGroupRef.current.scale.set(latticeScale, latticeScale, latticeScale);
+    }
+
+    // 4. Starlight Shimmer
+    if (starlightFieldRef.current) {
       if (!reducedMotion) {
-        innerPolyRef.current.rotation.x -= delta * (0.4 + metrics.highMid * 0.5);
+        starlightFieldRef.current.rotation.y += delta * 0.02;
       }
-    }
-
-    // 4. Geodesic Rings & Nodes
-    if (geodesicRingRef.current && !reducedMotion) {
-      geodesicRingRef.current.rotation.y += delta * 0.12;
-      geodesicRingRef.current.rotation.z -= delta * 0.08;
-    }
-
-    if (orbitingNodesRef.current && !reducedMotion) {
-      orbitingNodesRef.current.rotation.y -= delta * 0.35;
-      orbitingNodesRef.current.rotation.x += delta * 0.2;
     }
   });
 
   return (
-    <group name="stellar-geometry-master">
-      {/* Outer Polyhedral Wireframe Shell */}
-      <mesh ref={outerPolyRef}>
-        <icosahedronGeometry args={[14.5, 1]} />
-        <meshStandardMaterial
-          color="#64DFFF"
-          emissive="#64DFFF"
-          emissiveIntensity={0.6}
-          wireframe
+    <group name="stellar-geometry-preset">
+      {/* 1. Blindingly Bright Central Stellar Source (Reference C) */}
+      <mesh ref={centralStarRef} position={[0, 0, 0]}>
+        <sphereGeometry args={[4.2, 32, 32]} />
+        <meshBasicMaterial color="#FFFFFF" />
+      </mesh>
+
+      {/* 2. Razor-Sharp Four-Point Cross-Diffraction Spikes (Reference C) */}
+      <mesh ref={coreCrossHRef} position={[0, 0, 0.1]}>
+        <planeGeometry args={[44.0, 0.14]} />
+        <meshBasicMaterial
+          color="#FFFFFF"
           transparent
-          opacity={0.5}
-        />
-      </mesh>
-
-      {/* Middle Octahedral Rotating Ring */}
-      <mesh ref={midPolyRef}>
-        <octahedronGeometry args={[9.5, 0]} />
-        <meshStandardMaterial
-          color="#E8BC83"
-          emissive="#8C6CFF"
-          emissiveIntensity={0.8}
-          roughness={0.15}
-          metalness={0.9}
-          wireframe
-        />
-      </mesh>
-
-      {/* Inner Solid Geometric Core */}
-      <mesh ref={innerPolyRef}>
-        <dodecahedronGeometry args={[5.0, 0]} />
-        <meshStandardMaterial
-          color="#8C6CFF"
-          emissive="#64DFFF"
-          emissiveIntensity={1.4}
-          roughness={0.2}
-          metalness={0.8}
-        />
-      </mesh>
-
-      {/* Interlocking Geodesic Rings */}
-      <lineSegments ref={geodesicRingRef} geometry={circleLines}>
-        <lineBasicMaterial
-          color="#64DFFF"
-          transparent
-          opacity={0.35}
+          opacity={0.88}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
-      </lineSegments>
+      </mesh>
+      <mesh ref={coreCrossVRef} position={[0, 0, 0.1]} rotation={[0, 0, Math.PI / 2]}>
+        <planeGeometry args={[44.0, 0.14]} />
+        <meshBasicMaterial
+          color="#FFFFFF"
+          transparent
+          opacity={0.88}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
 
-      {/* Orbiting Parametric Nodes */}
-      <points ref={orbitingNodesRef}>
+      {/* 3. Soft Core Radiance Halo */}
+      <mesh position={[0, 0, -0.05]}>
+        <planeGeometry args={[14.0, 14.0]} />
+        <meshBasicMaterial
+          map={starTexture}
+          color="#FFFFFF"
+          transparent
+          opacity={0.7}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* 4. Intricate Dark Curved Webbing / Silhouette Dyson Lattice (Reference C) */}
+      <group ref={webbingGroupRef}>
+        {webbingLines.map((lineObj, idx) => (
+          <primitive key={idx} object={lineObj} />
+        ))}
+
+        {/* Outer Dark Silhouette Rings */}
+        <mesh rotation={[Math.PI / 3, 0, 0]}>
+          <ringGeometry args={[11.2, 12.8, 64]} />
+          <meshBasicMaterial color="#06080E" side={THREE.DoubleSide} transparent opacity={0.85} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 3, Math.PI / 4, 0]}>
+          <ringGeometry args={[11.2, 12.8, 64]} />
+          <meshBasicMaterial color="#06080E" side={THREE.DoubleSide} transparent opacity={0.85} />
+        </mesh>
+      </group>
+
+      {/* 5. Dense High-Contrast Field of Starlight (Reference C) */}
+      <points ref={starlightFieldRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[nodePositions, 3]} />
-          <bufferAttribute attach="attributes-color" args={[nodeColors, 3]} />
+          <bufferAttribute attach="attributes-position" args={[starPositions, 3]} />
         </bufferGeometry>
         <pointsMaterial
-          size={2.2}
-          vertexColors
+          map={starTexture}
+          color="#FFFFFF"
+          size={1.4}
           transparent
-          opacity={0.9}
+          opacity={0.92}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
+          sizeAttenuation
         />
       </points>
     </group>
