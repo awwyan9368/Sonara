@@ -246,29 +246,22 @@ export const SafeHtml = React.forwardRef<HTMLDivElement, SafeHtmlProps>(function
         const vec = calculatePosition(group.current, camera, size);
         el.style.cssText = `position:absolute;top:0;left:0;transform:translate3d(${vec[0]}px,${vec[1]}px,0);transform-origin:0 0;`;
       }
-      if (target) {
+      if (target && !target.contains(el)) {
         if (prepend) target.prepend(el);
         else target.appendChild(el);
       }
       return () => {
-        if (target) {
+        if (target && target.contains(el)) {
           try {
             target.removeChild(el);
           } catch {
             // Already removed or node missing
           }
         }
-        // React 19 safety: Defers root.unmount() past current render cycle
-        setTimeout(() => {
-          try {
-            currentRoot.unmount();
-          } catch {
-            // Safe cleanup
-          }
-        }, 0);
+        currentRoot.unmount();
       };
     }
-  }, [target, transform, el, scene, camera, size, calculatePosition, prepend]);
+  }, [target, transform]);
 
   React.useLayoutEffect(() => {
     if (el && wrapperClass) el.className = wrapperClass;
